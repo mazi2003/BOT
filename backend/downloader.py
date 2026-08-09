@@ -89,7 +89,7 @@ class Downloader:
             search_query = url
             is_search = not (url.startswith('http://') or url.startswith('https://'))
             if is_search:
-                search_query = f"ytsearch5:{url}"
+                search_query = f"ytsearch10:{url}"
                 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(search_query, download=False)

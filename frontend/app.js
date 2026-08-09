@@ -171,6 +171,12 @@ async function playTrack(index) {
         state.currentAudio.addEventListener('loadedmetadata', () => {
             elements.totalTime.textContent = formatTime(state.currentAudio.duration);
         });
+        state.currentAudio.addEventListener('error', (e) => {
+            console.error('Audio element error:', e);
+            setStatus('❌ خطأ في تحميل الصوت.');
+            elements.playBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+            elements.albumArtContainer.classList.remove('playing');
+        });
 
         playAudio();
     } else {
@@ -212,12 +218,16 @@ function togglePlay() {
 
 function playAudio() {
     if (state.currentAudio) {
-        state.currentAudio.play();
-        state.isPlaying = true;
-        elements.playBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-        elements.albumArtContainer.classList.add('playing');
-        setStatus('▶️ جارٍ التشغيل');
-        elements.playBtn.disabled = false;
+        state.currentAudio.play().then(() => {
+            state.isPlaying = true;
+            elements.playBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+            elements.albumArtContainer.classList.add('playing');
+            setStatus('▶️ جارٍ التشغيل');
+            elements.playBtn.disabled = false;
+        }).catch(e => {
+            console.error('Play error:', e);
+            setStatus('❌ لا يمكن التشغيل. تأكد من أن الرابط يعمل');
+        });
     }
 }
 

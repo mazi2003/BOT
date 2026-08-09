@@ -301,7 +301,7 @@ async def api_proxy(request):
     if not target_url:
         return web.Response(status=400, text="Missing target_url")
         
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}) as session:
         async with session.get(target_url) as resp:
             response = web.StreamResponse(
                 status=resp.status,
