@@ -1,3 +1,4 @@
+import asyncio
 import os
 import re
 import subprocess
@@ -23,7 +24,12 @@ class Downloader:
             }],
             'quiet': True,
             'no_warnings': True,
-            'extract_flat': False,
+            'extract_flat': True, # Overridden for streams
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web']
+                }
+            }
         }
         
         # Add cookies if available
@@ -137,11 +143,6 @@ class Downloader:
         temp_dir = tempfile.mkdtemp()
         output_template = os.path.join(temp_dir, '%(title)s.%(ext)s')
         
-        # First, try remote service (tier 1)
-        # audio_url = await self._try_remote_service(url)
-        # if audio_url:
-        #     return await self._download_from_url(audio_url)
-        
         # Fallback to local yt-dlp (tier 2)
         try:
             opts = self.ydl_opts.copy()
@@ -151,53 +152,60 @@ class Downloader:
             if not (url.startswith('http://') or url.startswith('https://')):
                 search_query = f"ytsearch1:{url}"
                 
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                # Extract info first
-                info = ydl.extract_info(search_query, download=False)
+            def _sync_download():
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    # Extract info first
+                    info = ydl.extract_info(search_query, download=False)
+                    
+                    # If it's a search result, it returns a playlist with entries
+                    if 'entries' in info:
+                        if not info['entries']:
+                            return None
+                        info = info['entries'][0]
+                        dl_query = info.get('webpage_url', search_query)
+                    else:
+                        dl_query = search_query
+                    
+                    # Check file size
+                    filesize = info.get('filesize_approx', 0)
+                    if filesize > self.max_size_mb * 1024 * 1024:
+                        logger.warning(f"File too large: {filesize} bytes")
+                        return None
+                    
+                    # Download audio
+                    ydl.download([dl_query])
+                    return info
+
+            info = await asyncio.to_thread(_sync_download)
+            if not info:
+                return None, {}
                 
-                # If it's a search result, it returns a playlist with entries
-                if 'entries' in info:
-                    if not info['entries']:
-                        return None, {}
-                    info = info['entries'][0]
-                    # Get the actual video URL to download
-                    search_query = info.get('webpage_url', search_query)
-                
-                # Check file size
-                filesize = info.get('filesize_approx', 0)
-                if filesize > self.max_size_mb * 1024 * 1024:
-                    logger.warning(f"File too large: {filesize} bytes")
-                    return None, {}
-                
-                # Download audio
-                ydl.download([search_query])
-                
-                # Find downloaded file
-                downloaded_files = [f for f in os.listdir(temp_dir) if f.endswith('.mp3')]
-                
-                if not downloaded_files:
-                    return None, {}
-                
-                audio_path = os.path.join(temp_dir, downloaded_files[0])
-                
-                # Extract metadata
-                title = self.sanitize_title(info.get('title', 'أغنية بدون عنوان'))
-                artist = info.get('uploader', 'فنان غير معروف')
-                
-                # Parse artist from title if needed
-                if ' - ' in title:
-                    parts = title.split(' - ', 1)
-                    artist = parts[0]
-                    title = parts[1]
-                
-                metadata = {
-                    'title': title,
-                    'artist': artist,
-                    'duration': info.get('duration', 0),
-                }
-                
-                return audio_path, metadata
-                
+            # Find downloaded file
+            downloaded_files = [f for f in os.listdir(temp_dir) if f.endswith('.mp3')]
+            
+            if not downloaded_files:
+                return None, {}
+            
+            audio_path = os.path.join(temp_dir, downloaded_files[0])
+            
+            # Extract metadata
+            title = self.sanitize_title(info.get('title', 'أغنية بدون عنوان'))
+            artist = info.get('uploader', 'فنان غير معروف')
+            
+            # Parse artist from title if needed
+            if ' - ' in title:
+                parts = title.split(' - ', 1)
+                artist = parts[0]
+                title = parts[1]
+            
+            metadata = {
+                'title': title,
+                'artist': artist,
+                'duration': info.get('duration', 0),
+            }
+            
+            return audio_path, metadata
+            
         except Exception as e:
             logger.error(f"Download error: {e}")
             return None, {}
