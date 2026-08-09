@@ -31,7 +31,7 @@ const elements = {
 };
 
 // API Configuration
-const API_BASE = 'https://your-backend.onrender.com'; // CHANGE THIS!
+const API_BASE = 'https://youtube-music-bot-a8uz.onrender.com'; // CHANGE THIS!
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
