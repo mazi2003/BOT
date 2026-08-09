@@ -3,92 +3,105 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>يوتيوب</title>
+    <title>Music Player</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0" />
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="app">
-        <!-- Top Navbar -->
-        <nav id="navbar">
-            <div class="logo-container">
-                <span class="material-symbols-rounded" style="color: #FF0000; font-size: 28px;">play_circle</span>
-                <h2>YouTube</h2>
-            </div>
-            <div class="search-container">
-                <input type="text" id="url-input" placeholder="البحث في يوتيوب..." dir="auto">
-                <button id="add-btn"><span class="material-symbols-rounded">search</span></button>
-            </div>
+        <!-- Top Tabs -->
+        <nav class="tabs-nav">
+            <button class="tab-btn active" data-target="search-tab">البحث 🔍</button>
+            <button class="tab-btn" data-target="library-tab">مكتبتي 📚</button>
         </nav>
 
-        <!-- Player Section (Hidden initially) -->
-        <section id="player-section" style="display: none;">
-            <div class="video-container">
-                <img id="track-thumbnail" src="" alt="Thumbnail">
-                <div class="video-controls-overlay">
-                    <button id="play-btn" class="overlay-play-btn"><span class="material-symbols-rounded">pause</span></button>
+        <!-- Status Bar -->
+        <div id="status-bar" style="display:none;"></div>
+
+        <!-- Main Content Area -->
+        <main class="content-area">
+            
+            <!-- Search Tab -->
+            <section id="search-tab" class="tab-content active">
+                <div class="search-box">
+                    <input type="text" id="url-input" placeholder="ابحث عن أغنية..." dir="auto">
+                    <button id="add-btn"><span class="material-symbols-rounded">search</span></button>
                 </div>
-                <!-- YouTube Red Progress Bar -->
-                <div class="yt-progress-container">
+                <div class="list-container" id="search-results-list">
+                    <!-- Search results injected here -->
+                </div>
+            </section>
+
+            <!-- Library Tab -->
+            <section id="library-tab" class="tab-content">
+                <div class="library-header">
+                    <h3>الأغاني المحفوظة</h3>
+                    <button id="clear-lib-btn" class="icon-btn text-danger"><span class="material-symbols-rounded">delete</span></button>
+                </div>
+                <div class="list-container" id="library-list">
+                    <!-- Library tracks injected here -->
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Sticky Bottom Mini Player -->
+        <div id="mini-player" style="display:none;">
+            <div class="mini-progress-container">
+                <div id="mini-progress-bar"></div>
+            </div>
+            <div class="mini-player-content">
+                <img id="mini-thumb" src="" alt="Cover">
+                <div class="mini-info" id="mini-info-box">
+                    <h4 id="mini-title">العنوان</h4>
+                    <p id="mini-artist">الفنان</p>
+                </div>
+                <div class="mini-controls">
+                    <button id="mini-play-btn" class="icon-btn"><span class="material-symbols-rounded">play_arrow</span></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Full Screen Player Modal -->
+        <div id="full-player-modal" class="modal-overlay">
+            <div class="full-player-content">
+                <div class="player-header">
+                    <button id="close-player-btn" class="icon-btn"><span class="material-symbols-rounded">expand_more</span></button>
+                    <span>جارٍ التشغيل</span>
+                    <button class="icon-btn" style="opacity:0"><span class="material-symbols-rounded">more_vert</span></button>
+                </div>
+                
+                <div class="album-art-container">
+                    <img id="full-thumb" src="" alt="Album Art">
+                </div>
+
+                <div class="track-details">
+                    <h2 id="full-title">العنوان</h2>
+                    <p id="full-artist">الفنان</p>
+                </div>
+
+                <div class="progress-section">
                     <input type="range" id="progress-bar" min="0" max="100" value="0">
-                </div>
-            </div>
-            
-            <div class="video-info">
-                <h3 id="track-title">عنوان الفيديو</h3>
-                <p id="track-artist">اسم القناة</p>
-                <div class="time-info">
-                    <span id="current-time">0:00</span> / <span id="total-time">0:00</span>
-                </div>
-            </div>
-
-            <!-- Action Buttons Row -->
-            <div class="action-buttons">
-                <button id="download-btn" class="action-btn">
-                    <span class="material-symbols-rounded">download</span>
-                    <span>تحميل</span>
-                </button>
-                <button id="prev-btn" class="action-btn">
-                    <span class="material-symbols-rounded">skip_previous</span>
-                    <span>السابق</span>
-                </button>
-                <button id="next-btn" class="action-btn">
-                    <span class="material-symbols-rounded">skip_next</span>
-                    <span>التالي</span>
-                </button>
-            </div>
-            <div class="separator"></div>
-        </section>
-
-        <!-- Main Feed (Search Results / Playlist) -->
-        <section id="feed-section">
-            <div id="feed-header" style="display: none;">
-                <h4>نتائج البحث</h4>
-                <button id="clear-search-btn" style="display:none;"><span class="material-symbols-rounded">close</span></button>
-            </div>
-            <div id="status-bar" style="display:none;"></div>
-            
-            <!-- Video Cards will be injected here -->
-            <div id="feed-list">
-                <!-- Example Card Structure -->
-                <!--
-                <div class="video-card">
-                    <div class="card-thumbnail">
-                        <img src="..." alt="Thumb">
-                        <span class="duration-badge">3:45</span>
-                    </div>
-                    <div class="card-details">
-                        <h4 class="card-title">عنوان الفيديو</h4>
-                        <p class="card-channel">اسم القناة</p>
+                    <div class="time-labels">
+                        <span id="current-time">0:00</span>
+                        <span id="total-time">0:00</span>
                     </div>
                 </div>
-                -->
+
+                <div class="main-controls">
+                    <button id="download-btn" class="icon-btn action-btn"><span class="material-symbols-rounded">download</span></button>
+                    <button id="prev-btn" class="icon-btn"><span class="material-symbols-rounded">skip_previous</span></button>
+                    <button id="play-btn" class="play-circle-btn"><span class="material-symbols-rounded">play_arrow</span></button>
+                    <button id="next-btn" class="icon-btn"><span class="material-symbols-rounded">skip_next</span></button>
+                    <button class="icon-btn action-btn" style="opacity:0.5"><span class="material-symbols-rounded">favorite</span></button>
+                </div>
             </div>
-        </section>
+        </div>
+
     </div>
 
     <script src="app.js"></script>

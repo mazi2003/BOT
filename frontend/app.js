@@ -5,37 +5,69 @@ tg.ready();
 const API_BASE = 'https://youtube-music-bot-a8uz.onrender.com';
 
 const state = {
-    playlist: [], // Can hold search results or a queue
+    library: [], // Persisted downloaded/added tracks
+    playlist: [], // Current queue
     currentIndex: -1,
     currentAudio: new Audio(),
     isPlaying: false,
     isSeeking: false,
-    searchResults: [] // Temporary store for search results
+    searchResults: []
 };
 
 const elements = {
     urlInput: document.getElementById('url-input'),
     addBtn: document.getElementById('add-btn'),
-    playerSection: document.getElementById('player-section'),
-    trackThumbnail: document.getElementById('track-thumbnail'),
-    playBtn: document.getElementById('play-btn'),
+    searchResultsList: document.getElementById('search-results-list'),
+    libraryList: document.getElementById('library-list'),
+    statusBar: document.getElementById('status-bar'),
+    
+    // Mini Player
+    miniPlayer: document.getElementById('mini-player'),
+    miniThumb: document.getElementById('mini-thumb'),
+    miniTitle: document.getElementById('mini-title'),
+    miniArtist: document.getElementById('mini-artist'),
+    miniPlayBtn: document.getElementById('mini-play-btn'),
+    miniProgressBar: document.getElementById('mini-progress-bar'),
+    
+    // Full Player
+    fullPlayerModal: document.getElementById('full-player-modal'),
+    closePlayerBtn: document.getElementById('close-player-btn'),
+    fullThumb: document.getElementById('full-thumb'),
+    fullTitle: document.getElementById('full-title'),
+    fullArtist: document.getElementById('full-artist'),
     progressBar: document.getElementById('progress-bar'),
-    trackTitle: document.getElementById('track-title'),
-    trackArtist: document.getElementById('track-artist'),
     currentTime: document.getElementById('current-time'),
     totalTime: document.getElementById('total-time'),
-    downloadBtn: document.getElementById('download-btn'),
+    playBtn: document.getElementById('play-btn'),
     prevBtn: document.getElementById('prev-btn'),
     nextBtn: document.getElementById('next-btn'),
-    feedList: document.getElementById('feed-list'),
-    statusBar: document.getElementById('status-bar')
+    downloadBtn: document.getElementById('download-btn'),
+    clearLibBtn: document.getElementById('clear-lib-btn')
 };
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+    setupTabs();
     setupEventListeners();
-    loadPlaylist();
+    loadLibrary();
 });
+
+function setupTabs() {
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            // Remove active class from all
+            tabBtns.forEach(b => b.classList.remove('active'));
+            tabContents.forEach(c => c.classList.remove('active'));
+            
+            // Add active class to clicked
+            btn.classList.add('active');
+            document.getElementById(btn.dataset.target).classList.add('active');
+        });
+    });
+}
 
 function setupEventListeners() {
     elements.addBtn.addEventListener('click', handleSearch);
@@ -43,6 +75,19 @@ function setupEventListeners() {
         if (e.key === 'Enter') handleSearch();
     });
     
+    // Player Toggles
+    elements.miniPlayer.addEventListener('click', (e) => {
+        if (e.target.closest('#mini-play-btn')) {
+            togglePlay();
+        } else {
+            elements.fullPlayerModal.classList.add('active');
+        }
+    });
+    elements.closePlayerBtn.addEventListener('click', () => {
+        elements.fullPlayerModal.classList.remove('active');
+    });
+
+    // Full Player Controls
     elements.playBtn.addEventListener('click', togglePlay);
     elements.prevBtn.addEventListener('click', playPrevious);
     elements.nextBtn.addEventListener('click', playNext);
@@ -61,6 +106,8 @@ function setupEventListeners() {
         setStatus('❌ خطأ في تحميل الصوت.');
         setPlayIcon(false);
     });
+
+    elements.clearLibBtn.addEventListener('click', clearLibrary);
 }
 
 function setStatus(msg) {
@@ -75,6 +122,9 @@ function setStatus(msg) {
 
 function setPlayIcon(isPlaying) {
     state.isPlaying = isPlaying;
+    elements.miniPlayBtn.innerHTML = isPlaying 
+        ? '<span class="material-symbols-rounded">pause</span>' 
+        : '<span class="material-symbols-rounded">play_arrow</span>';
     elements.playBtn.innerHTML = isPlaying 
         ? '<span class="material-symbols-rounded">pause</span>' 
         : '<span class="material-symbols-rounded">play_arrow</span>';
@@ -87,7 +137,7 @@ async function handleSearch() {
 
     elements.addBtn.disabled = true;
     setStatus('⏳ جاري البحث...');
-    elements.feedList.innerHTML = ''; // Clear previous results
+    elements.searchResultsList.innerHTML = ''; 
 
     try {
         const response = await fetch(`${API_BASE}/track_info?url=${encodeURIComponent(query)}`);
@@ -112,33 +162,73 @@ async function handleSearch() {
 }
 
 function renderSearchResults(results) {
-    elements.feedList.innerHTML = '';
+    elements.searchResultsList.innerHTML = '';
     results.forEach((res, index) => {
-        const card = document.createElement('div');
-        card.className = 'video-card';
-        card.innerHTML = `
-            <div class="card-thumbnail">
-                <img src="${res.thumbnail || 'https://ui-avatars.com/api/?name=YT&background=000&color=fff'}" alt="Thumb">
-                <span class="duration-badge">${res.duration}</span>
+        const item = document.createElement('div');
+        item.className = 'track-item';
+        item.innerHTML = `
+            <img class="track-thumb" src="${res.thumbnail || 'https://ui-avatars.com/api/?name=Music&background=222&color=fff'}" alt="Thumb">
+            <div class="track-info">
+                <h4 class="track-title">${res.title}</h4>
+                <p class="track-artist">${res.artist} • ${res.duration || '0:00'}</p>
             </div>
-            <div class="card-details">
-                <h4 class="card-title">${res.title}</h4>
-                <p class="card-channel">${res.artist}</p>
-            </div>
+            <button class="icon-btn"><span class="material-symbols-rounded">add</span></button>
         `;
-        card.onclick = () => playFromSearch(index);
-        elements.feedList.appendChild(card);
+        item.onclick = () => addAndPlayFromSearch(index);
+        elements.searchResultsList.appendChild(item);
     });
 }
 
-// Playback Logic
-function playFromSearch(index) {
+function addAndPlayFromSearch(index) {
     const track = state.searchResults[index];
-    // Set as current playlist of 1 for now (to mimic simple usage)
-    state.playlist = [track];
-    state.currentIndex = 0;
-    savePlaylist();
-    playTrack(0);
+    // Check if already in library
+    let libIndex = state.library.findIndex(t => t.id === track.id);
+    if (libIndex === -1) {
+        state.library.push(track);
+        saveLibrary();
+        renderLibrary();
+        libIndex = state.library.length - 1;
+        setStatus('✅ تمت الإضافة إلى المكتبة');
+    }
+    
+    playFromLibrary(libIndex);
+}
+
+// Library Logic
+function renderLibrary() {
+    elements.libraryList.innerHTML = '';
+    if (state.library.length === 0) {
+        elements.libraryList.innerHTML = '<p style="color: var(--text-sec); text-align: center; padding: 20px;">المكتبة فارغة</p>';
+        return;
+    }
+
+    state.library.forEach((track, index) => {
+        const item = document.createElement('div');
+        item.className = `track-item ${state.currentIndex === index && state.playlist === state.library ? 'playing' : ''}`;
+        item.innerHTML = `
+            <img class="track-thumb" src="${track.thumbnail || 'https://ui-avatars.com/api/?name=Music&background=222&color=fff'}" alt="Thumb">
+            <div class="track-info">
+                <h4 class="track-title">${track.title}</h4>
+                <p class="track-artist">${track.artist}</p>
+            </div>
+        `;
+        item.onclick = () => playFromLibrary(index);
+        elements.libraryList.appendChild(item);
+    });
+}
+
+function clearLibrary() {
+    if (confirm('هل أنت متأكد من مسح جميع الأغاني المحفوظة؟')) {
+        state.library = [];
+        saveLibrary();
+        renderLibrary();
+    }
+}
+
+// Playback Logic
+function playFromLibrary(index) {
+    state.playlist = state.library; // The queue is the library
+    playTrack(index);
 }
 
 async function playTrack(index) {
@@ -147,16 +237,25 @@ async function playTrack(index) {
     state.currentIndex = index;
     const track = state.playlist[index];
     
-    // Show Player
-    elements.playerSection.style.display = 'block';
+    // Show Mini Player
+    elements.miniPlayer.style.display = 'block';
     
     // Update UI
-    elements.trackTitle.textContent = track.title;
-    elements.trackArtist.textContent = track.artist;
-    elements.trackThumbnail.src = track.thumbnail || 'https://ui-avatars.com/api/?name=YT&background=000&color=fff';
+    const defaultThumb = 'https://ui-avatars.com/api/?name=Music&background=222&color=fff';
+    elements.miniTitle.textContent = track.title;
+    elements.miniArtist.textContent = track.artist;
+    elements.miniThumb.src = track.thumbnail || defaultThumb;
+    
+    elements.fullTitle.textContent = track.title;
+    elements.fullArtist.textContent = track.artist;
+    elements.fullThumb.src = track.thumbnail || defaultThumb;
+    
     elements.progressBar.value = 0;
+    elements.miniProgressBar.style.width = '0%';
     elements.currentTime.textContent = '0:00';
     elements.totalTime.textContent = track.duration || '0:00';
+
+    if (state.playlist === state.library) renderLibrary();
 
     if (track.audioUrl) {
         startAudio(track.audioUrl);
@@ -169,10 +268,10 @@ async function playTrack(index) {
             
             if (data.audio_url) {
                 track.audioUrl = data.audio_url;
-                savePlaylist();
+                saveLibrary();
                 startAudio(track.audioUrl);
             } else {
-                setStatus('❌ لا يمكن تشغيل هذا الفيديو');
+                setStatus('❌ لا يمكن تشغيل الأغنية');
             }
         } catch (error) {
             console.error('Stream error:', error);
@@ -202,7 +301,7 @@ function togglePlay() {
         if (state.currentAudio.src) {
             state.currentAudio.play().then(() => setPlayIcon(true)).catch(console.error);
         } else if (state.playlist.length > 0) {
-            playTrack(0);
+            playTrack(state.currentIndex > -1 ? state.currentIndex : 0);
         }
     }
 }
@@ -223,6 +322,7 @@ function updateProgress() {
     if (state.isSeeking || !state.currentAudio.duration) return;
     const progress = (state.currentAudio.currentTime / state.currentAudio.duration) * 100;
     elements.progressBar.value = progress;
+    elements.miniProgressBar.style.width = `${progress}%`;
     elements.currentTime.textContent = formatTime(state.currentAudio.currentTime);
 }
 
@@ -266,29 +366,29 @@ async function handleDownload() {
 }
 
 // Storage
-function savePlaylist() {
+function saveLibrary() {
     try {
-        localStorage.setItem('yt_playlist', JSON.stringify(state.playlist));
-        localStorage.setItem('yt_currentIndex', state.currentIndex);
+        localStorage.setItem('music_library', JSON.stringify(state.library));
     } catch (e) {
         console.warn('Could not save:', e);
     }
 }
 
-function loadPlaylist() {
+function loadLibrary() {
     try {
-        const saved = localStorage.getItem('yt_playlist');
+        const saved = localStorage.getItem('music_library');
         if (saved) {
-            state.playlist = JSON.parse(saved);
-            state.currentIndex = parseInt(localStorage.getItem('yt_currentIndex')) || -1;
-            
-            if (state.currentIndex !== -1 && state.currentIndex < state.playlist.length) {
-                const track = state.playlist[state.currentIndex];
-                elements.playerSection.style.display = 'block';
-                elements.trackTitle.textContent = track.title;
-                elements.trackArtist.textContent = track.artist;
-                elements.trackThumbnail.src = track.thumbnail || 'https://ui-avatars.com/api/?name=YT&background=000&color=fff';
-                elements.totalTime.textContent = track.duration || '0:00';
+            state.library = JSON.parse(saved);
+            renderLibrary();
+        }
+        
+        // Migrate old yt_playlist or playlist if music_library is empty
+        if (state.library.length === 0) {
+            const oldSaved = localStorage.getItem('yt_playlist') || localStorage.getItem('playlist');
+            if (oldSaved) {
+                state.library = JSON.parse(oldSaved);
+                saveLibrary();
+                renderLibrary();
             }
         }
     } catch (e) {
