@@ -246,11 +246,13 @@ async def api_track_info(request):
     url = request.query.get('url')
     if not url:
         return web.json_response({'error': 'No URL provided'}, status=400, headers={'Access-Control-Allow-Origin': '*'})
-    
-    info = downloader.get_track_info(url)
-    if info:
-        return web.json_response(info, headers={'Access-Control-Allow-Origin': '*'})
-    return web.json_response({'error': 'Not found'}, status=404, headers={'Access-Control-Allow-Origin': '*'})
+        
+    results = await asyncio.to_thread(downloader.get_track_info, url)
+    if not results:
+        return web.json_response({'error': 'Track not found'}, status=404, headers={'Access-Control-Allow-Origin': '*'})
+        
+    # results is a list of dicts. We return it as {'results': [...]}
+    return web.json_response({'results': results}, headers={'Access-Control-Allow-Origin': '*'})
 
 @routes.get('/stream')
 async def api_stream(request):
@@ -317,18 +319,43 @@ async def api_proxy(request):
                     break
             return response
 
+async def handle_background_download(url: str, chat_id: int):
+    try:
+        from aiogram.types import FSInputFile
+        file_path, info = await downloader.download_audio(url)
+        if file_path and os.path.exists(file_path):
+            audio = FSInputFile(file_path)
+            title = info.get('title', 'Audio')
+            performer = info.get('artist', 'Unknown')
+            duration = info.get('duration', 0)
+            await bot.send_audio(
+                chat_id=chat_id,
+                audio=audio,
+                title=title,
+                performer=performer,
+                duration=duration
+            )
+            os.remove(file_path)
+    except Exception as e:
+        logger.error(f"Background download failed: {e}")
+        try:
+            await bot.send_message(chat_id=chat_id, text="❌ حدث خطأ أثناء تحميل الأغنية.")
+        except:
+            pass
+
 @routes.post('/download')
 async def api_download(request):
     try:
         data = await request.json()
         url = data.get('url')
-        if not url:
-            return web.json_response({'error': 'No URL'}, status=400, headers={'Access-Control-Allow-Origin': '*'})
+        chat_id = data.get('chat_id')
+        
+        if not url or not chat_id:
+            return web.json_response({'error': 'Missing URL or chat_id'}, status=400, headers={'Access-Control-Allow-Origin': '*'})
             
-        # We trigger the download in the background so we don't block the API
-        # We would need the user's chat_id to send it back, but the Mini App 
-        # doesn't send the initData yet. For now, the user uses sendData back to the bot
-        # and the bot handles it.
+        import asyncio
+        asyncio.create_task(handle_background_download(url, int(chat_id)))
+        
         return web.json_response({'status': 'ok'}, headers={'Access-Control-Allow-Origin': '*'})
     except Exception as e:
         return web.json_response({'error': str(e)}, status=500, headers={'Access-Control-Allow-Origin': '*'})

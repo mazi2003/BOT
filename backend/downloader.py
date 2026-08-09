@@ -73,8 +73,8 @@ class Downloader:
         
         return cleaned
     
-    def get_track_info(self, url: str) -> Dict:
-        """Fetch track information without downloading"""
+    def get_track_info(self, url: str) -> list:
+        """Fetch track information without downloading. Returns a list of tracks."""
         try:
             ydl_opts = {
                 'quiet': True,
@@ -87,41 +87,50 @@ class Downloader:
             
             # Use search if it's not a URL
             search_query = url
-            if not (url.startswith('http://') or url.startswith('https://')):
-                search_query = f"ytsearch1:{url}"
+            is_search = not (url.startswith('http://') or url.startswith('https://'))
+            if is_search:
+                search_query = f"ytsearch5:{url}"
                 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(search_query, download=False)
                 
-                # If it's a search result, it returns a playlist with entries
+                entries = []
                 if 'entries' in info:
-                    if not info['entries']:
-                        return None
-                    info = info['entries'][0]
+                    entries = info['entries']
+                else:
+                    entries = [info]
+                    
+                if not entries:
+                    return []
+                    
+                results = []
+                for entry in entries:
+                    if not entry:
+                        continue
+                    title = entry.get('title', 'أغنية بدون عنوان')
+                    artist = entry.get('uploader', 'فنان غير معروف')
+                    
+                    title = self.sanitize_title(title)
+                    
+                    if ' - ' in title and 'Topic' in artist:
+                        parts = title.split(' - ', 1)
+                        artist = parts[0]
+                        title = parts[1]
+                        
+                    results.append({
+                        'id': entry.get('id'),
+                        'title': title,
+                        'artist': artist,
+                        'duration': entry.get('duration', 0),
+                        'thumbnail': entry.get('thumbnail'),
+                        'url': f"https://www.youtube.com/watch?v={entry.get('id')}"
+                    })
                 
-                title = info.get('title', 'أغنية بدون عنوان')
-                artist = info.get('uploader', 'فنان غير معروف')
-                
-                # Clean title
-                title = self.sanitize_title(title)
-                
-                # Try to extract artist from title if uploader is generic
-                if ' - ' in title and 'Topic' in artist:
-                    parts = title.split(' - ', 1)
-                    artist = parts[0]
-                    title = parts[1]
-                
-                return {
-                    'id': info.get('id'),
-                    'title': title,
-                    'artist': artist,
-                    'duration': info.get('duration', 0),
-                    'thumbnail': info.get('thumbnail'),
-                }
+                return results
                 
         except Exception as e:
             logger.error(f"Error fetching track info: {e}")
-            return None
+            return []
     
     async def download_audio(self, url: str) -> Tuple[Optional[str], Dict]:
         """Download audio from YouTube and convert to MP3"""

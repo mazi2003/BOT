@@ -60,7 +60,24 @@ function setupEventListeners() {
     elements.volumeBar.addEventListener('input', handleVolumeChange);
 }
 
-// Add Track
+function addTrackToPlaylist(track, url) {
+    state.playlist.push({
+        id: track.id,
+        title: track.title || 'أغنية بدون عنوان',
+        artist: track.artist || 'مجهول',
+        duration: track.duration || '00:00',
+        thumbnail: track.thumbnail || null,
+        url: track.url || url,
+        audioUrl: track.audio_url || null
+    });
+    savePlaylist();
+    renderPlaylist();
+    setStatus(`✅ تمت إضافة: ${track.title}`);
+    if (state.playlist.length === 1) {
+        playTrack(0);
+    }
+}
+
 async function handleAddTrack() {
     const url = elements.urlInput.value.trim();
     if (!url) {
@@ -72,52 +89,44 @@ async function handleAddTrack() {
     setStatus('⏳ جاري البحث / جلب المعلومات...');
 
     try {
-        // Try to fetch track info from backend
         const response = await fetch(`${API_BASE}/track_info?url=${encodeURIComponent(url)}`);
+        if (!response.ok) throw new Error('فشل جلب المعلومات');
         
-        if (!response.ok) {
-            throw new Error('فشل جلب المعلومات');
-        }
-
-        const track = await response.json();
+        const data = await response.json();
+        const results = data.results || [data];
         
-        // Add to playlist
-        state.playlist.push({
-            id: track.id,
-            title: track.title || 'أغنية بدون عنوان',
-            artist: track.artist || 'مجهول',
-            duration: track.duration || '00:00',
-            thumbnail: track.thumbnail || null,
-            url: url,
-            audioUrl: track.audio_url || null
-        });
-
-        savePlaylist();
-        renderPlaylist();
-        elements.urlInput.value = '';
-        setStatus(`✅ تمت إضافة: ${track.title}`);
-        
-        // Auto-play if first track
-        if (state.playlist.length === 1) {
-            playTrack(0);
+        if (results.length === 0) {
+            setStatus('❌ لم يتم العثور على نتائج');
+        } else if (results.length === 1) {
+            addTrackToPlaylist(results[0], url);
+            elements.urlInput.value = '';
+        } else {
+            const modal = document.getElementById('search-modal');
+            const list = document.getElementById('search-results-list');
+            list.innerHTML = '';
+            results.forEach(res => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <img src="${res.thumbnail || 'https://ui-avatars.com/api/?name=Music&background=1f1f2e&color=fff'}" alt="thumb">
+                    <div class="result-info">
+                        <strong>${res.title}</strong>
+                        <span>${res.artist} • ${res.duration}</span>
+                    </div>
+                `;
+                li.onclick = () => {
+                    modal.classList.remove('active');
+                    addTrackToPlaylist(res, res.url);
+                    elements.urlInput.value = '';
+                };
+                list.appendChild(li);
+            });
+            modal.classList.add('active');
+            setStatus('✅ اختر أغنية من النتائج');
         }
 
     } catch (error) {
         console.error('Error adding track:', error);
-        setStatus('❌ حدث خطأ. تأكد من الرابط وحاول مرة أخرى');
-        
-        // Fallback: Add as placeholder
-        state.playlist.push({
-            id: Date.now().toString(),
-            title: url.substring(0, 40) + '...',
-            artist: 'يوتيوب',
-            duration: '??:??',
-            url: url,
-            audioUrl: null
-        });
-        savePlaylist();
-        renderPlaylist();
-        setStatus('⚠️ تمت الإضافة كعنصر وهمي (لن يعمل التشغيل)');
+        setStatus('❌ حدث خطأ في البحث. حاول مرة أخرى');
     }
 
     elements.addBtn.disabled = false;
@@ -263,39 +272,31 @@ function handleVolumeChange(e) {
 
 // Download
 async function handleDownload() {
-    if (state.currentIndex === -1 || state.playlist.length === 0) {
-        setStatus('⚠️ لا توجد أغنية للتحميل');
-        return;
-    }
-
+    if (state.currentIndex === -1) return;
+    
     const track = state.playlist[state.currentIndex];
     const downloadBtn = elements.downloadBtn;
     downloadBtn.disabled = true;
-    setStatus('⏳ جاري تحميل الأغنية...');
+    setStatus('⏳ جاري التحميل... سيصلك الملف قريباً');
 
     try {
-        // Send download request to backend
+        const chat_id = tg.initDataUnsafe?.user?.id || 0;
+        
         const response = await fetch(`${API_BASE}/download`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: track.url })
+            body: JSON.stringify({ url: track.url, chat_id: chat_id })
         });
 
         if (response.ok) {
-            const result = await response.json();
-            setStatus(`✅ تم التحميل! سيصلك الملف في المحادثة`);
-            // Notify user in chat
-            tg.sendData(JSON.stringify({
-                type: 'download',
-                url: track.url
-            }));
+            setStatus(`✅ تم الطلب! راجع المحادثة مع البوت`);
         } else {
             throw new Error('فشل التحميل');
         }
 
     } catch (error) {
         console.error('Download error:', error);
-        setStatus('❌ فشل التحميل. حاول مرة أخرى');
+        setStatus('❌ فشل الطلب. حاول مرة أخرى');
     }
 
     downloadBtn.disabled = false;
@@ -453,5 +454,15 @@ tg.onEvent('mainButtonClicked', () => {
 window.addEventListener('beforeunload', () => {
     if (state.currentAudio) {
         state.currentAudio.pause();
+    }
+});
+
+// Modal Events
+document.addEventListener('DOMContentLoaded', () => {
+    const closeModalBtn = document.getElementById('close-modal-btn');
+    if (closeModalBtn) {
+        closeModalBtn.addEventListener('click', () => {
+            document.getElementById('search-modal').classList.remove('active');
+        });
     }
 });
