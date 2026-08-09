@@ -1,95 +1,96 @@
-// Telegram Mini App - Music Player
 const tg = window.Telegram.WebApp;
 tg.expand();
+tg.ready();
 
-// State
+const API_BASE = 'https://youtube-music-bot-a8uz.onrender.com';
+
 const state = {
-    playlist: [],
+    playlist: [], // Can hold search results or a queue
     currentIndex: -1,
+    currentAudio: new Audio(),
     isPlaying: false,
-    currentAudio: null,
-    isSeeking: false
+    isSeeking: false,
+    searchResults: [] // Temporary store for search results
 };
 
-// DOM Elements
 const elements = {
     urlInput: document.getElementById('url-input'),
     addBtn: document.getElementById('add-btn'),
+    playerSection: document.getElementById('player-section'),
+    trackThumbnail: document.getElementById('track-thumbnail'),
     playBtn: document.getElementById('play-btn'),
-    prevBtn: document.getElementById('prev-btn'),
-    nextBtn: document.getElementById('next-btn'),
-    downloadBtn: document.getElementById('download-btn'),
-    clearBtn: document.getElementById('clear-btn'),
     progressBar: document.getElementById('progress-bar'),
-    volumeBar: document.getElementById('volume-bar'),
-    currentTime: document.getElementById('current-time'),
-    totalTime: document.getElementById('total-time'),
     trackTitle: document.getElementById('track-title'),
     trackArtist: document.getElementById('track-artist'),
-    trackThumbnail: document.getElementById('track-thumbnail'),
-    albumArtContainer: document.querySelector('.album-art-container'),
-    playlist: document.getElementById('playlist'),
-    status: document.getElementById('status')
+    currentTime: document.getElementById('current-time'),
+    totalTime: document.getElementById('total-time'),
+    downloadBtn: document.getElementById('download-btn'),
+    prevBtn: document.getElementById('prev-btn'),
+    nextBtn: document.getElementById('next-btn'),
+    feedList: document.getElementById('feed-list'),
+    statusBar: document.getElementById('status-bar')
 };
-
-// API Configuration
-const API_BASE = 'https://youtube-music-bot-a8uz.onrender.com'; // CHANGE THIS!
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    loadPlaylist();
     setupEventListeners();
-    updateUI();
-    tg.ready();
+    loadPlaylist();
 });
 
-// Event Listeners
 function setupEventListeners() {
-    elements.addBtn.addEventListener('click', handleAddTrack);
-    elements.urlInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') handleAddTrack();
+    elements.addBtn.addEventListener('click', handleSearch);
+    elements.urlInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleSearch();
     });
     
     elements.playBtn.addEventListener('click', togglePlay);
     elements.prevBtn.addEventListener('click', playPrevious);
     elements.nextBtn.addEventListener('click', playNext);
     elements.downloadBtn.addEventListener('click', handleDownload);
-    elements.clearBtn.addEventListener('click', clearPlaylist);
     
     elements.progressBar.addEventListener('input', handleSeek);
-    elements.volumeBar.addEventListener('input', handleVolumeChange);
-}
-
-function addTrackToPlaylist(track, url) {
-    state.playlist.push({
-        id: track.id,
-        title: track.title || 'أغنية بدون عنوان',
-        artist: track.artist || 'مجهول',
-        duration: track.duration || '00:00',
-        thumbnail: track.thumbnail || null,
-        url: track.url || url,
-        audioUrl: track.audio_url || null
+    
+    // Audio Events
+    state.currentAudio.addEventListener('timeupdate', updateProgress);
+    state.currentAudio.addEventListener('ended', playNext);
+    state.currentAudio.addEventListener('loadedmetadata', () => {
+        elements.totalTime.textContent = formatTime(state.currentAudio.duration);
     });
-    savePlaylist();
-    renderPlaylist();
-    setStatus(`✅ تمت إضافة: ${track.title}`);
-    if (state.playlist.length === 1) {
-        playTrack(0);
+    state.currentAudio.addEventListener('error', (e) => {
+        console.error('Audio element error:', e);
+        setStatus('❌ خطأ في تحميل الصوت.');
+        setPlayIcon(false);
+    });
+}
+
+function setStatus(msg) {
+    elements.statusBar.style.display = 'block';
+    elements.statusBar.textContent = msg;
+    if (!msg.includes('⏳')) {
+        setTimeout(() => {
+            elements.statusBar.style.display = 'none';
+        }, 4000);
     }
 }
 
-async function handleAddTrack() {
-    const url = elements.urlInput.value.trim();
-    if (!url) {
-        setStatus('⚠️ أرجو إدخال رابط يوتيوب');
-        return;
-    }
+function setPlayIcon(isPlaying) {
+    state.isPlaying = isPlaying;
+    elements.playBtn.innerHTML = isPlaying 
+        ? '<span class="material-symbols-rounded">pause</span>' 
+        : '<span class="material-symbols-rounded">play_arrow</span>';
+}
+
+// Search Logic
+async function handleSearch() {
+    const query = elements.urlInput.value.trim();
+    if (!query) return;
 
     elements.addBtn.disabled = true;
-    setStatus('⏳ جاري البحث / جلب المعلومات...');
+    setStatus('⏳ جاري البحث...');
+    elements.feedList.innerHTML = ''; // Clear previous results
 
     try {
-        const response = await fetch(`${API_BASE}/track_info?url=${encodeURIComponent(url)}`);
+        const response = await fetch(`${API_BASE}/track_info?url=${encodeURIComponent(query)}`);
         if (!response.ok) throw new Error('فشل جلب المعلومات');
         
         const data = await response.json();
@@ -97,91 +98,71 @@ async function handleAddTrack() {
         
         if (results.length === 0) {
             setStatus('❌ لم يتم العثور على نتائج');
-        } else if (results.length === 1) {
-            addTrackToPlaylist(results[0], url);
-            elements.urlInput.value = '';
         } else {
-            const modal = document.getElementById('search-modal');
-            const list = document.getElementById('search-results-list');
-            list.innerHTML = '';
-            results.forEach(res => {
-                const li = document.createElement('li');
-                li.innerHTML = `
-                    <img src="${res.thumbnail || 'https://ui-avatars.com/api/?name=Music&background=1f1f2e&color=fff'}" alt="thumb">
-                    <div class="result-info">
-                        <strong>${res.title}</strong>
-                        <span>${res.artist} • ${res.duration}</span>
-                    </div>
-                `;
-                li.onclick = () => {
-                    modal.classList.remove('active');
-                    addTrackToPlaylist(res, res.url);
-                    elements.urlInput.value = '';
-                };
-                list.appendChild(li);
-            });
-            modal.classList.add('active');
-            setStatus('✅ اختر أغنية من النتائج');
+            setStatus('✅ تم العثور على نتائج');
+            state.searchResults = results;
+            renderSearchResults(results);
         }
-
     } catch (error) {
-        console.error('Error adding track:', error);
+        console.error('Search error:', error);
         setStatus('❌ حدث خطأ في البحث. حاول مرة أخرى');
     }
 
     elements.addBtn.disabled = false;
 }
 
-// Play Track
+function renderSearchResults(results) {
+    elements.feedList.innerHTML = '';
+    results.forEach((res, index) => {
+        const card = document.createElement('div');
+        card.className = 'video-card';
+        card.innerHTML = `
+            <div class="card-thumbnail">
+                <img src="${res.thumbnail || 'https://ui-avatars.com/api/?name=YT&background=000&color=fff'}" alt="Thumb">
+                <span class="duration-badge">${res.duration}</span>
+            </div>
+            <div class="card-details">
+                <h4 class="card-title">${res.title}</h4>
+                <p class="card-channel">${res.artist}</p>
+            </div>
+        `;
+        card.onclick = () => playFromSearch(index);
+        elements.feedList.appendChild(card);
+    });
+}
+
+// Playback Logic
+function playFromSearch(index) {
+    const track = state.searchResults[index];
+    // Set as current playlist of 1 for now (to mimic simple usage)
+    state.playlist = [track];
+    state.currentIndex = 0;
+    savePlaylist();
+    playTrack(0);
+}
+
 async function playTrack(index) {
     if (index < 0 || index >= state.playlist.length) return;
-
+    
     state.currentIndex = index;
     const track = state.playlist[index];
-
+    
+    // Show Player
+    elements.playerSection.style.display = 'block';
+    
     // Update UI
     elements.trackTitle.textContent = track.title;
     elements.trackArtist.textContent = track.artist;
-    if (track.thumbnail) {
-        elements.trackThumbnail.src = track.thumbnail;
-    } else {
-        elements.trackThumbnail.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(track.title)}&background=1f1f2e&color=fff&size=300`;
-    }
+    elements.trackThumbnail.src = track.thumbnail || 'https://ui-avatars.com/api/?name=YT&background=000&color=fff';
     elements.progressBar.value = 0;
-    elements.currentTime.textContent = '00:00';
-    elements.totalTime.textContent = track.duration || '00:00';
+    elements.currentTime.textContent = '0:00';
+    elements.totalTime.textContent = track.duration || '0:00';
 
-    // Highlight in playlist
-    document.querySelectorAll('#playlist li').forEach((li, i) => {
-        li.classList.toggle('active', i === index);
-    });
-
-    // If we have an audio URL, load and play it
     if (track.audioUrl) {
-        if (state.currentAudio) {
-            state.currentAudio.pause();
-            state.currentAudio = null;
-        }
-
-        state.currentAudio = new Audio(track.audioUrl);
-        state.currentAudio.volume = elements.volumeBar.value / 100;
-
-        state.currentAudio.addEventListener('timeupdate', updateProgress);
-        state.currentAudio.addEventListener('ended', playNext);
-        state.currentAudio.addEventListener('loadedmetadata', () => {
-            elements.totalTime.textContent = formatTime(state.currentAudio.duration);
-        });
-        state.currentAudio.addEventListener('error', (e) => {
-            console.error('Audio element error:', e);
-            setStatus('❌ خطأ في تحميل الصوت.');
-            elements.playBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
-            elements.albumArtContainer.classList.remove('playing');
-        });
-
-        playAudio();
+        startAudio(track.audioUrl);
     } else {
-        // No audio URL - try to get it from backend
         setStatus('⏳ جاري تجهيز البث...');
+        setPlayIcon(false);
         try {
             const response = await fetch(`${API_BASE}/stream?url=${encodeURIComponent(track.url)}`);
             const data = await response.json();
@@ -189,10 +170,9 @@ async function playTrack(index) {
             if (data.audio_url) {
                 track.audioUrl = data.audio_url;
                 savePlaylist();
-                playTrack(index); // Recursive call with audio URL
+                startAudio(track.audioUrl);
             } else {
                 setStatus('❌ لا يمكن تشغيل هذا الفيديو');
-                elements.playBtn.disabled = true;
             }
         } catch (error) {
             console.error('Stream error:', error);
@@ -201,47 +181,32 @@ async function playTrack(index) {
     }
 }
 
-// Play/Pause
+function startAudio(url) {
+    state.currentAudio.src = url;
+    state.currentAudio.play().then(() => {
+        setPlayIcon(true);
+        setStatus('▶️ جارٍ التشغيل');
+        elements.downloadBtn.disabled = false;
+    }).catch(e => {
+        console.error('Play error:', e);
+        setStatus('❌ لا يمكن التشغيل تلقائياً. اضغط زر التشغيل');
+        setPlayIcon(false);
+    });
+}
+
 function togglePlay() {
     if (state.isPlaying) {
-        pauseAudio();
+        state.currentAudio.pause();
+        setPlayIcon(false);
     } else {
-        if (state.currentIndex === -1 && state.playlist.length > 0) {
+        if (state.currentAudio.src) {
+            state.currentAudio.play().then(() => setPlayIcon(true)).catch(console.error);
+        } else if (state.playlist.length > 0) {
             playTrack(0);
-        } else if (state.currentIndex !== -1) {
-            playAudio();
-        } else {
-            setStatus('⚠️ أضف أغنية أولاً');
         }
     }
 }
 
-function playAudio() {
-    if (state.currentAudio) {
-        state.currentAudio.play().then(() => {
-            state.isPlaying = true;
-            elements.playBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
-            elements.albumArtContainer.classList.add('playing');
-            setStatus('▶️ جارٍ التشغيل');
-            elements.playBtn.disabled = false;
-        }).catch(e => {
-            console.error('Play error:', e);
-            setStatus('❌ لا يمكن التشغيل. تأكد من أن الرابط يعمل');
-        });
-    }
-}
-
-function pauseAudio() {
-    if (state.currentAudio) {
-        state.currentAudio.pause();
-        state.isPlaying = false;
-        elements.playBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
-        elements.albumArtContainer.classList.remove('playing');
-        setStatus('⏸️ متوقف مؤقتاً');
-    }
-}
-
-// Navigation
 function playNext() {
     if (state.playlist.length === 0) return;
     const nextIndex = (state.currentIndex + 1) % state.playlist.length;
@@ -254,30 +219,20 @@ function playPrevious() {
     playTrack(prevIndex);
 }
 
-// Progress
 function updateProgress() {
-    if (state.isSeeking) return;
-    if (state.currentAudio) {
-        const progress = (state.currentAudio.currentTime / state.currentAudio.duration) * 100;
-        elements.progressBar.value = progress;
-        elements.currentTime.textContent = formatTime(state.currentAudio.currentTime);
-    }
+    if (state.isSeeking || !state.currentAudio.duration) return;
+    const progress = (state.currentAudio.currentTime / state.currentAudio.duration) * 100;
+    elements.progressBar.value = progress;
+    elements.currentTime.textContent = formatTime(state.currentAudio.currentTime);
 }
 
 function handleSeek(e) {
     state.isSeeking = true;
-    if (state.currentAudio) {
+    if (state.currentAudio.duration) {
         const seekTime = (e.target.value / 100) * state.currentAudio.duration;
         state.currentAudio.currentTime = seekTime;
     }
     setTimeout(() => { state.isSeeking = false; }, 100);
-}
-
-// Volume
-function handleVolumeChange(e) {
-    if (state.currentAudio) {
-        state.currentAudio.volume = e.target.value / 100;
-    }
 }
 
 // Download
@@ -285,9 +240,8 @@ async function handleDownload() {
     if (state.currentIndex === -1) return;
     
     const track = state.playlist[state.currentIndex];
-    const downloadBtn = elements.downloadBtn;
-    downloadBtn.disabled = true;
-    setStatus('⏳ جاري التحميل... سيصلك الملف قريباً');
+    elements.downloadBtn.disabled = true;
+    setStatus('⏳ جاري التحميل... سيصلك الملف في المحادثة');
 
     try {
         const chat_id = tg.initDataUnsafe?.user?.id || 0;
@@ -299,180 +253,57 @@ async function handleDownload() {
         });
 
         if (response.ok) {
-            setStatus(`✅ تم الطلب! راجع المحادثة مع البوت`);
+            setStatus('✅ تم الطلب بنجاح! راجع المحادثة');
         } else {
-            throw new Error('فشل التحميل');
+            throw new Error('فشل الطلب');
         }
-
     } catch (error) {
         console.error('Download error:', error);
-        setStatus('❌ فشل الطلب. حاول مرة أخرى');
+        setStatus('❌ فشل التحميل. حاول مرة أخرى');
     }
 
-    downloadBtn.disabled = false;
-}
-
-// Playlist Management
-function renderPlaylist() {
-    const ul = elements.playlist;
-    ul.innerHTML = '';
-    
-    state.playlist.forEach((track, index) => {
-        const li = document.createElement('li');
-        li.className = index === state.currentIndex ? 'active' : '';
-        li.innerHTML = `
-            <div class="track-info">
-                <div class="track-name">${track.title}</div>
-                <div class="track-duration">${track.artist} · ${track.duration}</div>
-            </div>
-            <button class="remove-btn" data-index="${index}">
-                <span class="material-symbols-rounded">close</span>
-            </button>
-        `;
-        
-        li.addEventListener('click', (e) => {
-            if (!e.target.closest('.remove-btn')) {
-                playTrack(index);
-            }
-        });
-        
-        const removeBtn = li.querySelector('.remove-btn');
-        removeBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            removeTrack(index);
-        });
-        
-        ul.appendChild(li);
-    });
-
-    elements.clearBtn.style.display = state.playlist.length > 0 ? 'block' : 'none';
-    updateControls();
-}
-
-function removeTrack(index) {
-    state.playlist.splice(index, 1);
-    if (state.currentIndex === index) {
-        state.currentIndex = -1;
-        if (state.currentAudio) {
-            state.currentAudio.pause();
-            state.currentAudio = null;
-        }
-        state.isPlaying = false;
-        elements.playBtn.textContent = '▶️';
-    } else if (state.currentIndex > index) {
-        state.currentIndex--;
-    }
-    savePlaylist();
-    renderPlaylist();
-    updateUI();
-}
-
-function clearPlaylist() {
-    if (state.playlist.length === 0) return;
-    if (confirm('هل أنت متأكد من مسح قائمة التشغيل؟')) {
-        state.playlist = [];
-        state.currentIndex = -1;
-        if (state.currentAudio) {
-            state.currentAudio.pause();
-            state.currentAudio = null;
-        }
-        state.isPlaying = false;
-        savePlaylist();
-        renderPlaylist();
-        updateUI();
-        setStatus('🗑️ تم مسح القائمة');
-    }
-}
-
-// UI Updates
-function updateUI() {
-    const hasTracks = state.playlist.length > 0;
-    elements.playBtn.disabled = !hasTracks;
-    elements.prevBtn.disabled = !hasTracks;
-    elements.nextBtn.disabled = !hasTracks;
-    elements.downloadBtn.disabled = !hasTracks || state.currentIndex === -1;
-}
-
-function updateControls() {
-    updateUI();
-    if (state.currentIndex !== -1) {
-        elements.playBtn.disabled = false;
-    }
-}
-
-function setStatus(message) {
-    elements.status.textContent = message;
-    setTimeout(() => {
-        if (!message.includes('⚠️') && !message.includes('❌') && !message.includes('✅')) {
-            elements.status.textContent = '📱 جاهز';
-        }
-    }, 3000);
+    elements.downloadBtn.disabled = false;
 }
 
 // Storage
 function savePlaylist() {
     try {
-        localStorage.setItem('playlist', JSON.stringify(state.playlist));
-        localStorage.setItem('currentIndex', state.currentIndex);
+        localStorage.setItem('yt_playlist', JSON.stringify(state.playlist));
+        localStorage.setItem('yt_currentIndex', state.currentIndex);
     } catch (e) {
-        console.warn('Could not save playlist:', e);
+        console.warn('Could not save:', e);
     }
 }
 
 function loadPlaylist() {
     try {
-        const saved = localStorage.getItem('playlist');
+        const saved = localStorage.getItem('yt_playlist');
         if (saved) {
             state.playlist = JSON.parse(saved);
-            state.currentIndex = parseInt(localStorage.getItem('currentIndex')) || -1;
-            renderPlaylist();
+            state.currentIndex = parseInt(localStorage.getItem('yt_currentIndex')) || -1;
+            
             if (state.currentIndex !== -1 && state.currentIndex < state.playlist.length) {
                 const track = state.playlist[state.currentIndex];
+                elements.playerSection.style.display = 'block';
                 elements.trackTitle.textContent = track.title;
                 elements.trackArtist.textContent = track.artist;
-                if (track.thumbnail) {
-                    elements.trackThumbnail.src = track.thumbnail;
-                } else {
-                    elements.trackThumbnail.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(track.title)}&background=1f1f2e&color=fff&size=300`;
-                }
-                elements.totalTime.textContent = track.duration || '00:00';
+                elements.trackThumbnail.src = track.thumbnail || 'https://ui-avatars.com/api/?name=YT&background=000&color=fff';
+                elements.totalTime.textContent = track.duration || '0:00';
             }
         }
     } catch (e) {
-        console.warn('Could not load playlist:', e);
+        console.warn('Could not load:', e);
     }
 }
 
-// Utilities
 function formatTime(seconds) {
-    if (isNaN(seconds)) return '00:00';
+    if (isNaN(seconds)) return '0:00';
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    return `${mins}:${String(secs).padStart(2, '0')}`;
 }
 
-// Telegram WebApp Events
-tg.onEvent('mainButtonClicked', () => {
-    if (state.isPlaying) {
-        pauseAudio();
-    } else {
-        playAudio();
-    }
-});
-
-// Handle closing
+tg.onEvent('mainButtonClicked', togglePlay);
 window.addEventListener('beforeunload', () => {
-    if (state.currentAudio) {
-        state.currentAudio.pause();
-    }
-});
-
-// Modal Events
-document.addEventListener('DOMContentLoaded', () => {
-    const closeModalBtn = document.getElementById('close-modal-btn');
-    if (closeModalBtn) {
-        closeModalBtn.addEventListener('click', () => {
-            document.getElementById('search-modal').classList.remove('active');
-        });
-    }
+    if (state.currentAudio) state.currentAudio.pause();
 });

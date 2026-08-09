@@ -3,84 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>مشغل الموسيقى</title>
+    <title>يوتيوب</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Outfit:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0" />
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="background-glow"></div>
     <div id="app">
-        <!-- Header -->
-        <header>
-            <div class="header-content">
-                <h1>مشغل الموسيقى</h1>
-                <span id="status">جاهز</span>
+        <!-- Top Navbar -->
+        <nav id="navbar">
+            <div class="logo-container">
+                <span class="material-symbols-rounded" style="color: #FF0000; font-size: 28px;">play_circle</span>
+                <h2>YouTube</h2>
             </div>
-        </header>
-
-        <!-- Player Section -->
-        <section id="player-section" class="glass-card">
-            <div class="album-art-container">
-                <img id="track-thumbnail" src="https://ui-avatars.com/api/?name=%D9%85%D9%88%D8%B3%D9%8A%D9%82%D9%89&background=1f1f2e&color=fff&size=300" alt="Album Art">
-            </div>
-            
-            <div id="current-track">
-                <h3 id="track-title">لا توجد أغنية</h3>
-                <p id="track-artist">أضف أغنية للبدء</p>
-            </div>
-            
-            <div id="player-controls">
-                <div id="progress-container">
-                    <span id="current-time">00:00</span>
-                    <input type="range" id="progress-bar" min="0" max="100" value="0">
-                    <span id="total-time">00:00</span>
-                </div>
-                
-                <div id="controls">
-                    <button id="download-btn" disabled><span class="material-symbols-rounded">download</span></button>
-                    <button id="prev-btn" disabled><span class="material-symbols-rounded">skip_previous</span></button>
-                    <button id="play-btn" class="main-btn" disabled><span class="material-symbols-rounded">play_arrow</span></button>
-                    <button id="next-btn" disabled><span class="material-symbols-rounded">skip_next</span></button>
-                    
-                    <div class="volume-wrapper">
-                        <span class="material-symbols-rounded">volume_up</span>
-                        <input type="range" id="volume-bar" min="0" max="100" value="80">
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Search Section -->
-        <section id="search-section" class="glass-card">
-            <div class="input-group">
-                <input type="text" id="url-input" placeholder="ابحث عن أغنية أو رابط..." dir="auto">
+            <div class="search-container">
+                <input type="text" id="url-input" placeholder="البحث في يوتيوب..." dir="auto">
                 <button id="add-btn"><span class="material-symbols-rounded">search</span></button>
             </div>
+        </nav>
+
+        <!-- Player Section (Hidden initially) -->
+        <section id="player-section" style="display: none;">
+            <div class="video-container">
+                <img id="track-thumbnail" src="" alt="Thumbnail">
+                <div class="video-controls-overlay">
+                    <button id="play-btn" class="overlay-play-btn"><span class="material-symbols-rounded">pause</span></button>
+                </div>
+                <!-- YouTube Red Progress Bar -->
+                <div class="yt-progress-container">
+                    <input type="range" id="progress-bar" min="0" max="100" value="0">
+                </div>
+            </div>
+            
+            <div class="video-info">
+                <h3 id="track-title">عنوان الفيديو</h3>
+                <p id="track-artist">اسم القناة</p>
+                <div class="time-info">
+                    <span id="current-time">0:00</span> / <span id="total-time">0:00</span>
+                </div>
+            </div>
+
+            <!-- Action Buttons Row -->
+            <div class="action-buttons">
+                <button id="download-btn" class="action-btn">
+                    <span class="material-symbols-rounded">download</span>
+                    <span>تحميل</span>
+                </button>
+                <button id="prev-btn" class="action-btn">
+                    <span class="material-symbols-rounded">skip_previous</span>
+                    <span>السابق</span>
+                </button>
+                <button id="next-btn" class="action-btn">
+                    <span class="material-symbols-rounded">skip_next</span>
+                    <span>التالي</span>
+                </button>
+            </div>
+            <div class="separator"></div>
         </section>
 
-        <!-- Playlist Section -->
-        <section id="playlist-section" class="glass-card">
-            <div class="playlist-header">
-                <h4>قائمة التشغيل</h4>
-                <button id="clear-btn" style="display:none;"><span class="material-symbols-rounded">delete</span></button>
+        <!-- Main Feed (Search Results / Playlist) -->
+        <section id="feed-section">
+            <div id="feed-header" style="display: none;">
+                <h4>نتائج البحث</h4>
+                <button id="clear-search-btn" style="display:none;"><span class="material-symbols-rounded">close</span></button>
             </div>
-            <ul id="playlist"></ul>
+            <div id="status-bar" style="display:none;"></div>
+            
+            <!-- Video Cards will be injected here -->
+            <div id="feed-list">
+                <!-- Example Card Structure -->
+                <!--
+                <div class="video-card">
+                    <div class="card-thumbnail">
+                        <img src="..." alt="Thumb">
+                        <span class="duration-badge">3:45</span>
+                    </div>
+                    <div class="card-details">
+                        <h4 class="card-title">عنوان الفيديو</h4>
+                        <p class="card-channel">اسم القناة</p>
+                    </div>
+                </div>
+                -->
+            </div>
         </section>
-    </div>
-
-    <!-- Search Results Modal -->
-    <div id="search-modal" class="modal-overlay">
-        <div class="modal-content glass-card">
-            <div class="modal-header">
-                <h3>نتائج البحث</h3>
-                <button id="close-modal-btn"><span class="material-symbols-rounded">close</span></button>
-            </div>
-            <ul id="search-results-list"></ul>
-        </div>
     </div>
 
     <script src="app.js"></script>
