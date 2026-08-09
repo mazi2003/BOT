@@ -278,8 +278,9 @@ async def api_stream(request):
                         break
             
             if audio_url:
+                import urllib.parse
                 # We must proxy the audio to avoid YouTube IP binding blocks (403 Forbidden)
-                proxy_url = f"{request.scheme}://{request.host}/proxy?target_url={web.urlquote(audio_url)}"
+                proxy_url = f"{request.scheme}://{request.host}/proxy?target_url={urllib.parse.quote(audio_url)}"
                 return web.json_response({'audio_url': proxy_url}, headers={'Access-Control-Allow-Origin': '*'})
     except Exception as e:
         logger.error(f"Stream error: {e}")
