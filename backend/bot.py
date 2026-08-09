@@ -233,7 +233,6 @@ async def handle_any_message(message: types.Message):
 
 from aiohttp import web
 import json
-import cors  # not available, we need to set CORS headers manually
 
 routes = web.RouteTableDef()
 
