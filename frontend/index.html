@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>🎵 مشغل يوتيوب</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header>
+            <h1>🎵 مشغل الموسيقى</h1>
+            <span id="status">📱 جاهز</span>
+        </header>
+
+        <!-- Search Section -->
+        <section id="search-section">
+            <div class="input-group">
+                <input type="text" id="url-input" placeholder="أدخل رابط يوتيوب أو ابحث..." dir="ltr">
+                <button id="add-btn">➕ إضافة</button>
+            </div>
+        </section>
+
+        <!-- Player Section -->
+        <section id="player-section">
+            <div id="current-track">
+                <h3 id="track-title">لا توجد أغنية</h3>
+                <p id="track-artist">أضف أغنية للبدء</p>
+            </div>
+            
+            <div id="player-controls">
+                <div id="progress-container">
+                    <span id="current-time">00:00</span>
+                    <input type="range" id="progress-bar" min="0" max="100" value="0">
+                    <span id="total-time">00:00</span>
+                </div>
+                
+                <div id="controls">
+                    <button id="prev-btn" disabled>⏮️</button>
+                    <button id="play-btn" disabled>▶️</button>
+                    <button id="next-btn" disabled>⏭️</button>
+                    <button id="download-btn" disabled>📥</button>
+                </div>
+                
+                <div id="volume-container">
+                    <span>🔊</span>
+                    <input type="range" id="volume-bar" min="0" max="100" value="80">
+                </div>
+            </div>
+        </section>
+
+        <!-- Playlist Section -->
+        <section id="playlist-section">
+            <h4>📋 قائمة التشغيل</h4>
+            <ul id="playlist"></ul>
+            <button id="clear-btn" style="display:none;">🗑️ مسح الكل</button>
+        </section>
+
+        <!-- Footer -->
+        <footer>
+            <p>⏱️ تشغيل في الخلفية - يمكنك إغلاق الشاشة</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
