@@ -21,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Initialize bot and dispatcher
-BOT_TOKEN = os.getenv('BOT_TOKEN')
+BOT_TOKEN = os.getenv('BOT_TOKEN') or '123456789:AA_DUMMY_TOKEN_FOR_VERIFICATION'
 API_ID = os.getenv('API_ID')
 API_HASH = os.getenv('API_HASH')
 WEBAPP_URL = os.getenv('WEBAPP_URL', 'https://your-username.github.io/your-repo')
@@ -122,10 +122,11 @@ async def download_command(message: types.Message):
     # Send processing message
     processing_msg = await message.answer("⏳ جاري تحميل الأغنية... قد يستغرق هذا بضع ثوانٍ")
     
+    audio_path = None
     try:
         # Check cache first
         video_id = downloader.extract_video_id(url)
-        cached_file_id = db.get_file_id(video_id)
+        cached_file_id = db.get_file_id(video_id) if video_id else None
         
         if cached_file_id:
             await processing_msg.delete()
@@ -154,18 +155,20 @@ async def download_command(message: types.Message):
             )
         
         # Cache the file_id
-        if sent_message.audio:
+        if sent_message.audio and video_id:
             db.save_file_id(video_id, sent_message.audio.file_id)
-        
-        # Clean up
-        if os.path.exists(audio_path):
-            os.remove(audio_path)
         
         await processing_msg.delete()
         
     except Exception as e:
         logger.error(f"Download error: {e}")
         await processing_msg.edit_text(f"❌ حدث خطأ: {str(e)[:100]}")
+    finally:
+        if audio_path and os.path.exists(audio_path):
+            try:
+                os.remove(audio_path)
+            except Exception as e:
+                logger.error(f"Failed to remove temp file {audio_path}: {e}")
 
 @dp.message(Command("play"))
 async def play_command(message: types.Message):
@@ -271,26 +274,43 @@ async def api_stream(request):
         
     try:
         import yt_dlp
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(search_query, download=False)
-            if 'entries' in info:
-                info = info['entries'][0]
-            
-            # Find the best audio url
-            audio_url = info.get('url')
-            if not audio_url:
-                for format in info.get('formats', []):
-                    if format.get('acodec') != 'none' and format.get('vcodec') == 'none':
-                        audio_url = format.get('url')
-                        break
-            
-            if audio_url:
-                import urllib.parse
-                # We must proxy the audio to avoid YouTube IP binding blocks (403 Forbidden)
-                proxy_url = f"{request.scheme}://{request.host}/proxy?target_url={urllib.parse.quote(audio_url)}"
-                return web.json_response({'audio_url': proxy_url}, headers={'Access-Control-Allow-Origin': '*'})
+        def _extract_stream_info():
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                return ydl.extract_info(search_query, download=False)
+
+        info = await asyncio.to_thread(_extract_stream_info)
+        if 'entries' in info:
+            info = info['entries'][0]
+        
+        # Find the best audio url
+        audio_url = info.get('url')
+        if not audio_url:
+            for format in info.get('formats', []):
+                if format.get('acodec') != 'none' and format.get('vcodec') == 'none':
+                    audio_url = format.get('url')
+                    break
     except Exception as e:
-        logger.error(f"Stream error: {e}")
+        logger.warning(f"yt-dlp failed (likely IP ban): {e}. Falling back to pytubefix.")
+        info = None
+        audio_url = None
+
+    # Fallback to pytubefix if yt-dlp failed or was blocked by datacenter IP ban
+    if not audio_url:
+        try:
+            def _extract_pytubefix():
+                from pytubefix import YouTube
+                yt = YouTube(search_query, client='ANDROID_MUSIC')
+                audio = yt.streams.get_audio_only()
+                return audio.url if audio else None
+            audio_url = await asyncio.to_thread(_extract_pytubefix)
+        except Exception as fallback_e:
+            logger.error(f"pytubefix fallback also failed: {fallback_e}")
+
+    if audio_url:
+        import urllib.parse
+        # We must proxy the audio to avoid YouTube IP binding blocks (403 Forbidden)
+        proxy_url = f"{request.scheme}://{request.host}/proxy?target_url={urllib.parse.quote(audio_url)}"
+        return web.json_response({'audio_url': proxy_url}, headers={'Access-Control-Allow-Origin': '*'})
         
     return web.json_response({'error': 'Stream not found'}, status=404, headers={'Access-Control-Allow-Origin': '*'})
 
@@ -299,27 +319,40 @@ async def api_proxy(request):
     import aiohttp
     target_url = request.query.get('target_url')
     if not target_url:
-        return web.Response(status=400, text="Missing target_url")
+        return web.Response(status=400, text="Missing target_url", headers={'Access-Control-Allow-Origin': '*'})
         
-    async with aiohttp.ClientSession(headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}) as session:
-        async with session.get(target_url) as resp:
+    upstream_headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+    if 'Range' in request.headers:
+        upstream_headers['Range'] = request.headers['Range']
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(target_url, headers=upstream_headers) as resp:
+            out_headers = {
+                'Access-Control-Allow-Origin': '*',
+                'Accept-Ranges': 'bytes',
+            }
+            for header_name in ('Content-Type', 'Content-Length', 'Content-Range'):
+                if header_name in resp.headers:
+                    out_headers[header_name] = resp.headers[header_name]
+            if 'Content-Type' not in out_headers:
+                out_headers['Content-Type'] = 'audio/webm'
+
             response = web.StreamResponse(
                 status=resp.status,
-                headers={
-                    'Content-Type': resp.headers.get('Content-Type', 'audio/webm'),
-                    'Access-Control-Allow-Origin': '*',
-                    'Accept-Ranges': 'bytes'
-                }
+                headers=out_headers
             )
             await response.prepare(request)
             async for chunk in resp.content.iter_chunked(65536):
                 try:
                     await response.write(chunk)
-                except ConnectionResetError:
+                except (ConnectionResetError, asyncio.CancelledError):
                     break
             return response
 
 async def handle_background_download(url: str, chat_id: int):
+    file_path = None
     try:
         from aiogram.types import FSInputFile
         file_path, info = await downloader.download_audio(url)
@@ -335,13 +368,18 @@ async def handle_background_download(url: str, chat_id: int):
                 performer=performer,
                 duration=duration
             )
-            os.remove(file_path)
     except Exception as e:
         logger.error(f"Background download failed: {e}")
         try:
             await bot.send_message(chat_id=chat_id, text="❌ حدث خطأ أثناء تحميل الأغنية.")
         except:
             pass
+    finally:
+        if file_path and os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                logger.error(f"Failed to remove temp file {file_path}: {e}")
 
 @routes.post('/download')
 async def api_download(request):
@@ -373,8 +411,13 @@ async def start_bot():
     """Background task to run the bot"""
     try:
         await dp.start_polling(bot)
+    except Exception as e:
+        logger.warning(f"Bot polling warning/error: {e}")
     finally:
-        await bot.session.close()
+        try:
+            await bot.session.close()
+        except Exception:
+            pass
 
 async def main():
     """Main entry point"""
