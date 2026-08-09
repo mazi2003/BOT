@@ -66,14 +66,8 @@ async function handleAddTrack() {
         return;
     }
 
-    // Check if it's a YouTube URL
-    if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
-        setStatus('⚠️ الرجاء إدخال رابط يوتيوب صحيح');
-        return;
-    }
-
     elements.addBtn.disabled = true;
-    setStatus('⏳ جاري جلب المعلومات...');
+    setStatus('⏳ جاري البحث / جلب المعلومات...');
 
     try {
         // Try to fetch track info from backend
