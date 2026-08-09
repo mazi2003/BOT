@@ -236,6 +236,11 @@ import json
 
 routes = web.RouteTableDef()
 
+@routes.get('/')
+async def api_health(request):
+    """Health check for UptimeRobot and Render"""
+    return web.Response(text="Bot is running! 🚀", status=200)
+
 @routes.get('/track_info')
 async def api_track_info(request):
     url = request.query.get('url')
