@@ -3,28 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>🎵 مشغل يوتيوب</title>
+    <title>مشغل الموسيقى</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Outfit:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0" />
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <div id="background-glow"></div>
     <div id="app">
         <!-- Header -->
         <header>
-            <h1>🎵 مشغل الموسيقى</h1>
-            <span id="status">📱 جاهز</span>
+            <div class="header-content">
+                <h1>مشغل الموسيقى</h1>
+                <span id="status">جاهز</span>
+            </div>
         </header>
 
-        <!-- Search Section -->
-        <section id="search-section">
-            <div class="input-group">
-                <input type="text" id="url-input" placeholder="أدخل رابط يوتيوب أو ابحث..." dir="ltr">
-                <button id="add-btn">➕ إضافة</button>
-            </div>
-        </section>
-
         <!-- Player Section -->
-        <section id="player-section">
+        <section id="player-section" class="glass-card">
+            <div class="album-art-container">
+                <img id="track-thumbnail" src="https://ui-avatars.com/api/?name=%D9%85%D9%88%D8%B3%D9%8A%D9%82%D9%89&background=1f1f2e&color=fff&size=300" alt="Album Art">
+            </div>
+            
             <div id="current-track">
                 <h3 id="track-title">لا توجد أغنية</h3>
                 <p id="track-artist">أضف أغنية للبدء</p>
@@ -38,30 +41,35 @@
                 </div>
                 
                 <div id="controls">
-                    <button id="prev-btn" disabled>⏮️</button>
-                    <button id="play-btn" disabled>▶️</button>
-                    <button id="next-btn" disabled>⏭️</button>
-                    <button id="download-btn" disabled>📥</button>
-                </div>
-                
-                <div id="volume-container">
-                    <span>🔊</span>
-                    <input type="range" id="volume-bar" min="0" max="100" value="80">
+                    <button id="download-btn" disabled><span class="material-symbols-rounded">download</span></button>
+                    <button id="prev-btn" disabled><span class="material-symbols-rounded">skip_previous</span></button>
+                    <button id="play-btn" class="main-btn" disabled><span class="material-symbols-rounded">play_arrow</span></button>
+                    <button id="next-btn" disabled><span class="material-symbols-rounded">skip_next</span></button>
+                    
+                    <div class="volume-wrapper">
+                        <span class="material-symbols-rounded">volume_up</span>
+                        <input type="range" id="volume-bar" min="0" max="100" value="80">
+                    </div>
                 </div>
             </div>
         </section>
 
-        <!-- Playlist Section -->
-        <section id="playlist-section">
-            <h4>📋 قائمة التشغيل</h4>
-            <ul id="playlist"></ul>
-            <button id="clear-btn" style="display:none;">🗑️ مسح الكل</button>
+        <!-- Search Section -->
+        <section id="search-section" class="glass-card">
+            <div class="input-group">
+                <input type="text" id="url-input" placeholder="ابحث عن أغنية أو رابط..." dir="auto">
+                <button id="add-btn"><span class="material-symbols-rounded">search</span></button>
+            </div>
         </section>
 
-        <!-- Footer -->
-        <footer>
-            <p>⏱️ تشغيل في الخلفية - يمكنك إغلاق الشاشة</p>
-        </footer>
+        <!-- Playlist Section -->
+        <section id="playlist-section" class="glass-card">
+            <div class="playlist-header">
+                <h4>قائمة التشغيل</h4>
+                <button id="clear-btn" style="display:none;"><span class="material-symbols-rounded">delete</span></button>
+            </div>
+            <ul id="playlist"></ul>
+        </section>
     </div>
 
     <script src="app.js"></script>

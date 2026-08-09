@@ -26,6 +26,8 @@ const elements = {
     totalTime: document.getElementById('total-time'),
     trackTitle: document.getElementById('track-title'),
     trackArtist: document.getElementById('track-artist'),
+    trackThumbnail: document.getElementById('track-thumbnail'),
+    albumArtContainer: document.querySelector('.album-art-container'),
     playlist: document.getElementById('playlist'),
     status: document.getElementById('status')
 };
@@ -85,6 +87,7 @@ async function handleAddTrack() {
             title: track.title || 'أغنية بدون عنوان',
             artist: track.artist || 'مجهول',
             duration: track.duration || '00:00',
+            thumbnail: track.thumbnail || null,
             url: url,
             audioUrl: track.audio_url || null
         });
@@ -130,6 +133,11 @@ async function playTrack(index) {
     // Update UI
     elements.trackTitle.textContent = track.title;
     elements.trackArtist.textContent = track.artist;
+    if (track.thumbnail) {
+        elements.trackThumbnail.src = track.thumbnail;
+    } else {
+        elements.trackThumbnail.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(track.title)}&background=1f1f2e&color=fff&size=300`;
+    }
     elements.progressBar.value = 0;
     elements.currentTime.textContent = '00:00';
     elements.totalTime.textContent = track.duration || '00:00';
@@ -197,7 +205,8 @@ function playAudio() {
     if (state.currentAudio) {
         state.currentAudio.play();
         state.isPlaying = true;
-        elements.playBtn.textContent = '⏸️';
+        elements.playBtn.innerHTML = '<span class="material-symbols-rounded">pause</span>';
+        elements.albumArtContainer.classList.add('playing');
         setStatus('▶️ جارٍ التشغيل');
         elements.playBtn.disabled = false;
     }
@@ -207,7 +216,8 @@ function pauseAudio() {
     if (state.currentAudio) {
         state.currentAudio.pause();
         state.isPlaying = false;
-        elements.playBtn.textContent = '▶️';
+        elements.playBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
+        elements.albumArtContainer.classList.remove('playing');
         setStatus('⏸️ متوقف مؤقتاً');
     }
 }
@@ -304,11 +314,13 @@ function renderPlaylist() {
                 <div class="track-name">${track.title}</div>
                 <div class="track-duration">${track.artist} · ${track.duration}</div>
             </div>
-            <button class="remove-btn" data-index="${index}">✕</button>
+            <button class="remove-btn" data-index="${index}">
+                <span class="material-symbols-rounded">close</span>
+            </button>
         `;
         
         li.addEventListener('click', (e) => {
-            if (!e.target.classList.contains('remove-btn')) {
+            if (!e.target.closest('.remove-btn')) {
                 playTrack(index);
             }
         });
@@ -407,6 +419,11 @@ function loadPlaylist() {
                 const track = state.playlist[state.currentIndex];
                 elements.trackTitle.textContent = track.title;
                 elements.trackArtist.textContent = track.artist;
+                if (track.thumbnail) {
+                    elements.trackThumbnail.src = track.thumbnail;
+                } else {
+                    elements.trackThumbnail.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(track.title)}&background=1f1f2e&color=fff&size=300`;
+                }
                 elements.totalTime.textContent = track.duration || '00:00';
             }
         }
