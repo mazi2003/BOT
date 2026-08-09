@@ -85,8 +85,19 @@ class Downloader:
             if os.path.exists(self.cookies_file):
                 ydl_opts['cookiefile'] = self.cookies_file
             
+            # Use search if it's not a URL
+            search_query = url
+            if not (url.startswith('http://') or url.startswith('https://')):
+                search_query = f"ytsearch1:{url}"
+                
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
+                info = ydl.extract_info(search_query, download=False)
+                
+                # If it's a search result, it returns a playlist with entries
+                if 'entries' in info:
+                    if not info['entries']:
+                        return None
+                    info = info['entries'][0]
                 
                 title = info.get('title', 'أغنية بدون عنوان')
                 artist = info.get('uploader', 'فنان غير معروف')
@@ -127,9 +138,21 @@ class Downloader:
             opts = self.ydl_opts.copy()
             opts['outtmpl'] = output_template
             
+            search_query = url
+            if not (url.startswith('http://') or url.startswith('https://')):
+                search_query = f"ytsearch1:{url}"
+                
             with yt_dlp.YoutubeDL(opts) as ydl:
                 # Extract info first
-                info = ydl.extract_info(url, download=False)
+                info = ydl.extract_info(search_query, download=False)
+                
+                # If it's a search result, it returns a playlist with entries
+                if 'entries' in info:
+                    if not info['entries']:
+                        return None, {}
+                    info = info['entries'][0]
+                    # Get the actual video URL to download
+                    search_query = info.get('webpage_url', search_query)
                 
                 # Check file size
                 filesize = info.get('filesize_approx', 0)
@@ -138,7 +161,7 @@ class Downloader:
                     return None, {}
                 
                 # Download audio
-                ydl.download([url])
+                ydl.download([search_query])
                 
                 # Find downloaded file
                 downloaded_files = [f for f in os.listdir(temp_dir) if f.endswith('.mp3')]

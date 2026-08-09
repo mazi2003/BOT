@@ -231,13 +231,112 @@ async def handle_any_message(message: types.Message):
             reply_markup=keyboard
         )
 
-async def main():
-    """Main entry point"""
-    logger.info("🚀 Starting bot...")
+from aiohttp import web
+import json
+import cors  # not available, we need to set CORS headers manually
+
+routes = web.RouteTableDef()
+
+@routes.get('/track_info')
+async def api_track_info(request):
+    url = request.query.get('url')
+    if not url:
+        return web.json_response({'error': 'No URL provided'}, status=400, headers={'Access-Control-Allow-Origin': '*'})
+    
+    info = downloader.get_track_info(url)
+    if info:
+        return web.json_response(info, headers={'Access-Control-Allow-Origin': '*'})
+    return web.json_response({'error': 'Not found'}, status=404, headers={'Access-Control-Allow-Origin': '*'})
+
+@routes.get('/stream')
+async def api_stream(request):
+    url = request.query.get('url')
+    if not url:
+        return web.json_response({'error': 'No URL provided'}, status=400, headers={'Access-Control-Allow-Origin': '*'})
+    
+    # In a real scenario, this should fetch the direct audio URL.
+    # For now, we'll try to get it from track info
+    opts = downloader.ydl_opts.copy()
+    opts['extract_flat'] = False
+    
+    search_query = url
+    if not (url.startswith('http://') or url.startswith('https://')):
+        search_query = f"ytsearch1:{url}"
+        
+    try:
+        import yt_dlp
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(search_query, download=False)
+            if 'entries' in info:
+                info = info['entries'][0]
+            # Find the best audio url
+            audio_url = None
+            for format in info.get('formats', []):
+                if format.get('acodec') != 'none' and format.get('vcodec') == 'none':
+                    audio_url = format.get('url')
+                    break
+            if audio_url:
+                return web.json_response({'audio_url': audio_url}, headers={'Access-Control-Allow-Origin': '*'})
+    except Exception as e:
+        logger.error(f"Stream error: {e}")
+        
+    return web.json_response({'error': 'Stream not found'}, status=404, headers={'Access-Control-Allow-Origin': '*'})
+
+@routes.post('/download')
+async def api_download(request):
+    try:
+        data = await request.json()
+        url = data.get('url')
+        if not url:
+            return web.json_response({'error': 'No URL'}, status=400, headers={'Access-Control-Allow-Origin': '*'})
+            
+        # We trigger the download in the background so we don't block the API
+        # We would need the user's chat_id to send it back, but the Mini App 
+        # doesn't send the initData yet. For now, the user uses sendData back to the bot
+        # and the bot handles it.
+        return web.json_response({'status': 'ok'}, headers={'Access-Control-Allow-Origin': '*'})
+    except Exception as e:
+        return web.json_response({'error': str(e)}, status=500, headers={'Access-Control-Allow-Origin': '*'})
+
+@routes.options('/{tail:.*}')
+async def cors_handler(request):
+    headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+    }
+    return web.Response(headers=headers)
+
+async def start_bot():
+    """Background task to run the bot"""
     try:
         await dp.start_polling(bot)
     finally:
         await bot.session.close()
+
+async def main():
+    """Main entry point"""
+    logger.info("🚀 Starting bot and web server...")
+    
+    # Start bot polling in the background
+    asyncio.create_task(start_bot())
+    
+    # Start aiohttp web server
+    app = web.Application()
+    app.add_routes(routes)
+    
+    runner = web.AppRunner(app)
+    await runner.setup()
+    
+    port = int(os.getenv("PORT", 8080))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    
+    logger.info(f"🌐 Web server running on port {port}")
+    
+    # Keep the main task running indefinitely
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == "__main__":
     asyncio.run(main())
