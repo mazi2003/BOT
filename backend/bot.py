@@ -268,18 +268,48 @@ async def api_stream(request):
             info = ydl.extract_info(search_query, download=False)
             if 'entries' in info:
                 info = info['entries'][0]
+            
             # Find the best audio url
-            audio_url = None
-            for format in info.get('formats', []):
-                if format.get('acodec') != 'none' and format.get('vcodec') == 'none':
-                    audio_url = format.get('url')
-                    break
+            audio_url = info.get('url')
+            if not audio_url:
+                for format in info.get('formats', []):
+                    if format.get('acodec') != 'none' and format.get('vcodec') == 'none':
+                        audio_url = format.get('url')
+                        break
+            
             if audio_url:
-                return web.json_response({'audio_url': audio_url}, headers={'Access-Control-Allow-Origin': '*'})
+                # We must proxy the audio to avoid YouTube IP binding blocks (403 Forbidden)
+                proxy_url = f"{request.scheme}://{request.host}/proxy?target_url={web.urlquote(audio_url)}"
+                return web.json_response({'audio_url': proxy_url}, headers={'Access-Control-Allow-Origin': '*'})
     except Exception as e:
         logger.error(f"Stream error: {e}")
         
     return web.json_response({'error': 'Stream not found'}, status=404, headers={'Access-Control-Allow-Origin': '*'})
+
+@routes.get('/proxy')
+async def api_proxy(request):
+    import aiohttp
+    target_url = request.query.get('target_url')
+    if not target_url:
+        return web.Response(status=400, text="Missing target_url")
+        
+    async with aiohttp.ClientSession() as session:
+        async with session.get(target_url) as resp:
+            response = web.StreamResponse(
+                status=resp.status,
+                headers={
+                    'Content-Type': resp.headers.get('Content-Type', 'audio/webm'),
+                    'Access-Control-Allow-Origin': '*',
+                    'Accept-Ranges': 'bytes'
+                }
+            )
+            await response.prepare(request)
+            async for chunk in resp.content.iter_chunked(65536):
+                try:
+                    await response.write(chunk)
+                except ConnectionResetError:
+                    break
+            return response
 
 @routes.post('/download')
 async def api_download(request):
